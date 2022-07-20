@@ -1,0 +1,116 @@
+//Copyright (c) 1997-2004 Microsoft Corporation
+BackupRoute="DIRECT";
+UseDirectForLocal=true;
+function MakeIPs(){
+}
+DirectIPs=new MakeIPs();
+cDirectIPs=0;
+function MakeNames(){
+this[0]="*.gpfbkk.local";
+}
+DirectNames=new MakeNames();
+cDirectNames=1;
+HttpPort="8080";
+// cNodes = How many proxy ?
+cNodes=2;
+function MakeProxies(){
+this[0]=new Node("172.17.6.75",2032180928,1.000000);
+this[1]=new Node("172.17.6.75",2843172549,1.000000);
+//this[1]=new Node("172.17.6.75",2843172549,1.000000);
+}
+Proxies = new MakeProxies();
+function Node(name, hash, load){
+ this.name = name;
+ this.hash = hash;
+ this.load = load;
+ this.score = 0;
+ return this;
+}
+function FindProxyForURL(url, host){
+ var hash=0, urllower, i, fIp=false, ip, nocarp=false, skiphost=false;
+ var list, pl, j, score, ibest, bestscore, port=HttpPort;
+ urllower = url.toLowerCase();
+ if((urllower.substring(0,5)=="rtsp:") ||
+    (urllower.substring(0,6)=="rtspt:") ||
+    (urllower.substring(0,6)=="rtspu:") ||
+    (urllower.substring(0,4)=="mms:") ||
+    (urllower.substring(0,5)=="mmst:") ||
+    (urllower.substring(0,5)=="mmsu:"))
+    return "DIRECT";
+
+if (shExpMatch(url, "*")) {return "DIRECT";}
+//if (shExpMatch(url, "https://www.newcb.ktb.co.th*")) {return "PROXY 172.17.6.75:8080";}
+ if(UseDirectForLocal){
+  if(isPlainHostName(host))
+   fIp = true;}
+ for(i = 0; i < cDirectNames; i++)
+  if(shExpMatch(host, DirectNames[i])){
+   fIp = true;
+   break;}
+ if(cDirectIPs == 0){
+  if(fIp)
+   return "DIRECT";}
+ else{
+  ip = host;
+  if(fIp)
+   ip = dnsResolve(host);
+  var isIpAddr = /^(\d+.){3}\d+$/;
+  if(isIpAddr.test(ip)){
+   for(i = 0; i < cDirectIPs; i += 2){
+    if(isInNet(ip, DirectIPs[i], DirectIPs[i+1]))
+     return "DIRECT";}}
+  else if(isPlainHostName(host))
+   return "DIRECT";
+ }
+ if(!skiphost)
+  hash = HashString(host,hash);
+ if(nocarp)
+  hash = HashString(myIpAddress(), hash);
+ pl = new Array();
+ for(i = 0; i<cNodes; i++){
+  Proxies[i].score = Proxies[i].load * Scramble(hash ^ Proxies[i].hash);
+  pl[i] = i;
+ }
+ list = "";
+ for(j = 0; j < cNodes; j++){
+  bestscore = -1;
+  for(i = 0; i < cNodes-j; i++){
+   score = Proxies[pl[i]].score;
+   if(score > bestscore){
+    bestscore = score;
+    ibest = i;
+  }}
+  list = list + "PROXY " + Proxies[pl[ibest]].name + ":" + port + "; ";
+  pl[ibest] = pl[cNodes-j-1];
+ }
+ list = list + BackupRoute;
+ return list;
+}
+var h_tbl = new Array(0,0x10D01913,0x21A03226,0x31702B35,0x4340644C,0x53907D5F,0x62E0566A,0x72304F79,0x8680C898,0x9650D18B,0xA720FABE,0xB7F0E3AD,0xC5C0ACD4,0xD510B5C7,0xE4609EF2,0xF4B087E1);
+function HashString(str, h){
+  for(var i=0; i<str.length; i++){
+   var c = str.charAt(i);
+   if (c==':' || c=='/') break;
+   c = CharToAscii(c.toLowerCase());
+   h = (h >>> 4) ^ h_tbl[(h ^ c) & 15];
+   h = (h >>> 4) ^ h_tbl[(h ^ (c>>>4)) & 15];
+   h = MakeInt(h);
+ }
+ return h;
+}
+function Scramble(h){
+ h += ((h & 0xffff) * 0x1965) + ((((h >> 16) & 0xffff) * 0x1965) << 16) + (((h & 0xffff) * 0x6253) << 16);
+ h = MakeInt(h);
+ h += (((h & 0x7ff) << 21) | ((h >> 11) & 0x1fffff));
+ return MakeInt(h);
+}
+var Chars =" !\"#$%&\'()*+,-./0123456789:;<=>?@ABCDEFGHIJKLMNOPQRSTUVWXYZ[\\]^_`abcdefghijklmnopqrstuvwxyz{|}~€???????????????????????? ¡¢£¤¥¦§¨©ª«¬­®¯°±²³´µ¶·¸¹º»¼½¾¿ÀÁÂÃÄÅÆÇÈÉÊËÌÍÎÏĞÑÒÓÔÕÖ×ØÙÚÛÜİŞßàáâãäåæçèéêëìíîïğñòóôõö÷øùúûüış ";
+function CharToAscii(c){
+ return Chars.indexOf(c) + 32;
+}
+function MakeInt(x){
+ x %= 4294967296;
+ if(x < 0)
+  x += 4294967296;
+ return x;
+}
